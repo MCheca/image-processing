@@ -14,6 +14,13 @@ export class Price {
     return new Price(roundedValue);
   }
 
+  static fromValue(value: number): Price {
+    if (value < this.MIN_PRICE || value > this.MAX_PRICE) {
+      throw new Error(`Price must be between ${this.MIN_PRICE} and ${this.MAX_PRICE}`);
+    }
+    return new Price(value);
+  }
+
   get value(): number {
     return this._value;
   }
