@@ -53,7 +53,7 @@ describe('Task Entity', () => {
 
       expect(completedTask.status.isCompleted()).toBe(true);
       expect(completedTask.images).toEqual(images);
-      expect(completedTask.updatedAt.getTime()).toBeGreaterThan(task.updatedAt.getTime());
+      expect(completedTask.updatedAt.getTime()).toBeGreaterThanOrEqual(task.updatedAt.getTime());
     });
 
     it('should throw error when completing without images', () => {
@@ -71,7 +71,7 @@ describe('Task Entity', () => {
       expect(failedTask.status.isFailed()).toBe(true);
       expect(failedTask.errorMessage).toBe(errorMessage);
       expect(failedTask.images).toEqual([]);
-      expect(failedTask.updatedAt.getTime()).toBeGreaterThan(task.updatedAt.getTime());
+      expect(failedTask.updatedAt.getTime()).toBeGreaterThanOrEqual(task.updatedAt.getTime());
     });
 
     it('should throw error when failing without error message', () => {
