@@ -4,8 +4,10 @@ import sharp from 'sharp';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { ImageFormatRegistry } from './formats/ImageFormatRegistry';
 
 export class SharpImageProcessor implements ImageProcessor {
+  private readonly formatRegistry = new ImageFormatRegistry();
   async processImage(
     sourcePath: string,
     outputDir: string,
@@ -157,41 +159,11 @@ export class SharpImageProcessor implements ImageProcessor {
       withoutEnlargement: false, // Allow upscaling smaller images to target resolution
     });
 
-    // Preserve format (normalize to lowercase)
-    const normalizedFormat = format.toLowerCase();
+    const strategy = this.formatRegistry.getStrategy(format);
+    const buffer = await strategy.encode(pipeline);
+    const extension = strategy.getExtension(originalExtension);
 
-    switch (normalizedFormat) {
-      case 'jpeg':
-      case 'jpg':
-        return {
-          buffer: await pipeline.jpeg().toBuffer(),
-          extension: originalExtension,
-        };
-      case 'png':
-        return {
-          buffer: await pipeline.png().toBuffer(),
-          extension: originalExtension,
-        };
-      case 'webp':
-        return {
-          buffer: await pipeline.webp().toBuffer(),
-          extension: originalExtension,
-        };
-      case 'avif':
-      case 'heif':
-        // AVIF and HEIF formats have compatibility issues with some Sharp builds
-        // Convert to JPEG for maximum compatibility
-        return {
-          buffer: await pipeline.jpeg().toBuffer(),
-          extension: '.jpg',
-        };
-      default:
-        // Default to JPEG for unknown formats
-        return {
-          buffer: await pipeline.jpeg().toBuffer(),
-          extension: '.jpg',
-        };
-    }
+    return { buffer, extension };
   }
 
   private generateMD5(buffer: Buffer): string {
