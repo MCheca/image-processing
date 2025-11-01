@@ -38,13 +38,15 @@ class MockTaskRepository implements TaskRepository {
 class MockTaskQueue implements ITaskQueue {
   public addTaskCalled = false;
   public lastTaskId: string | null = null;
-  public lastImagePath: string | null = null;
+  public lastImageSource: string | Buffer | null = null;
+  public lastFilename: string | null = null;
   public shouldFailOnAdd = false;
 
-  async addTask(taskId: string, imagePath: string): Promise<void> {
+  async addTask(taskId: string, imageSource: string | Buffer, filename?: string): Promise<void> {
     this.addTaskCalled = true;
     this.lastTaskId = taskId;
-    this.lastImagePath = imagePath;
+    this.lastImageSource = imageSource;
+    this.lastFilename = filename || null;
 
     if (this.shouldFailOnAdd) {
       throw new Error('Queue error: Failed to add task');
@@ -54,7 +56,8 @@ class MockTaskQueue implements ITaskQueue {
   reset(): void {
     this.addTaskCalled = false;
     this.lastTaskId = null;
-    this.lastImagePath = null;
+    this.lastImageSource = null;
+    this.lastFilename = null;
     this.shouldFailOnAdd = false;
   }
 }
@@ -425,6 +428,190 @@ describe('CreateTaskUseCase', () => {
     });
   });
 
+  describe('URL image download', () => {
+    it('should download image from URL before creating task', async () => {
+      const mockDownloader = {
+        downloadCalled: false,
+        lastUrl: null as string | null,
+        async downloadImage(url: string): Promise<{ buffer: Buffer; filename: string }> {
+          this.downloadCalled = true;
+          this.lastUrl = url;
+          return {
+            buffer: Buffer.from('fake-image-data'),
+            filename: 'downloaded-image.jpg',
+          };
+        },
+        isUrl(path: string): boolean {
+          return path.startsWith('http://') || path.startsWith('https://');
+        },
+      };
+
+      const useCaseWithDownloader = new CreateTaskUseCase(
+        mockRepository,
+        mockQueue,
+        mockDownloader
+      );
+
+      const input: CreateTaskInput = {
+        originalPath: 'https://example.com/test.jpg',
+      };
+
+      await useCaseWithDownloader.execute(input);
+
+      expect(mockDownloader.downloadCalled).toBe(true);
+      expect(mockDownloader.lastUrl).toBe('https://example.com/test.jpg');
+    });
+
+    it('should save task with original URL for URL input', async () => {
+      const mockDownloader = {
+        async downloadImage(_url: string): Promise<{ buffer: Buffer; filename: string }> {
+          return {
+            buffer: Buffer.from('fake-image-data'),
+            filename: 'downloaded-image.jpg',
+          };
+        },
+        isUrl(path: string): boolean {
+          return path.startsWith('http://') || path.startsWith('https://');
+        },
+      };
+
+      const useCaseWithDownloader = new CreateTaskUseCase(
+        mockRepository,
+        mockQueue,
+        mockDownloader
+      );
+
+      const input: CreateTaskInput = {
+        originalPath: 'https://example.com/test.jpg',
+      };
+
+      await useCaseWithDownloader.execute(input);
+
+      const savedTask = mockRepository.lastSavedTask!;
+      expect(savedTask.originalPath).toBe('https://example.com/test.jpg');
+    });
+
+    it('should pass buffer to queue for URL input', async () => {
+      const fakeBuffer = Buffer.from('fake-image-data');
+      const mockDownloader = {
+        async downloadImage(_url: string): Promise<{ buffer: Buffer; filename: string }> {
+          return {
+            buffer: fakeBuffer,
+            filename: 'test.jpg',
+          };
+        },
+        isUrl(path: string): boolean {
+          return path.startsWith('http://') || path.startsWith('https://');
+        },
+      };
+
+      const useCaseWithDownloader = new CreateTaskUseCase(
+        mockRepository,
+        mockQueue,
+        mockDownloader
+      );
+
+      const input: CreateTaskInput = {
+        originalPath: 'https://example.com/test.jpg',
+      };
+
+      await useCaseWithDownloader.execute(input);
+
+      expect(mockQueue.lastImageSource).toBe(fakeBuffer);
+      expect(mockQueue.lastFilename).toBe('test.jpg');
+    });
+
+    it('should not download if input is a local path', async () => {
+      const mockDownloader = {
+        downloadCalled: false,
+        async downloadImage(_url: string): Promise<{ buffer: Buffer; filename: string }> {
+          this.downloadCalled = true;
+          return {
+            buffer: Buffer.from('fake-image-data'),
+            filename: 'downloaded-image.jpg',
+          };
+        },
+        isUrl(path: string): boolean {
+          return path.startsWith('http://') || path.startsWith('https://');
+        },
+      };
+
+      const useCaseWithDownloader = new CreateTaskUseCase(
+        mockRepository,
+        mockQueue,
+        mockDownloader
+      );
+
+      const input: CreateTaskInput = {
+        originalPath: '/input/local-image.jpg',
+      };
+
+      await useCaseWithDownloader.execute(input);
+
+      expect(mockDownloader.downloadCalled).toBe(false);
+    });
+
+    it('should handle download errors gracefully', async () => {
+      const mockDownloader = {
+        async downloadImage(_url: string): Promise<{ buffer: Buffer; filename: string }> {
+          throw new Error('Network error: Failed to download image');
+        },
+        isUrl(path: string): boolean {
+          return path.startsWith('http://') || path.startsWith('https://');
+        },
+      };
+
+      const useCaseWithDownloader = new CreateTaskUseCase(
+        mockRepository,
+        mockQueue,
+        mockDownloader
+      );
+
+      const input: CreateTaskInput = {
+        originalPath: 'https://example.com/test.jpg',
+      };
+
+      await expect(useCaseWithDownloader.execute(input)).rejects.toThrow(
+        'Network error: Failed to download image'
+      );
+    });
+
+    it('should support both http and https URLs', async () => {
+      const mockDownloader = {
+        downloadedUrls: [] as string[],
+        async downloadImage(url: string): Promise<{ buffer: Buffer; filename: string }> {
+          this.downloadedUrls.push(url);
+          return {
+            buffer: Buffer.from('fake-image-data'),
+            filename: 'downloaded-image.jpg',
+          };
+        },
+        isUrl(path: string): boolean {
+          return path.startsWith('http://') || path.startsWith('https://');
+        },
+      };
+
+      const useCaseWithDownloader = new CreateTaskUseCase(
+        mockRepository,
+        mockQueue,
+        mockDownloader
+      );
+
+      const httpInput: CreateTaskInput = {
+        originalPath: 'http://example.com/test.jpg',
+      };
+      await useCaseWithDownloader.execute(httpInput);
+
+      const httpsInput: CreateTaskInput = {
+        originalPath: 'https://example.com/test.jpg',
+      };
+      await useCaseWithDownloader.execute(httpsInput);
+
+      expect(mockDownloader.downloadedUrls).toContain('http://example.com/test.jpg');
+      expect(mockDownloader.downloadedUrls).toContain('https://example.com/test.jpg');
+    });
+  });
+
   describe('task queue integration', () => {
     it('should add task to queue after creation', async () => {
       const input: CreateTaskInput = {
@@ -436,7 +623,7 @@ describe('CreateTaskUseCase', () => {
       expect(mockQueue.addTaskCalled).toBe(true);
     });
 
-    it('should pass correct taskId and imagePath to queue', async () => {
+    it('should pass correct taskId and imageSource to queue', async () => {
       const input: CreateTaskInput = {
         originalPath: '/input/test-image.jpg',
       };
@@ -444,7 +631,7 @@ describe('CreateTaskUseCase', () => {
       const output = await createTaskUseCase.execute(input);
 
       expect(mockQueue.lastTaskId).toBe(output.taskId);
-      expect(mockQueue.lastImagePath).toBe(input.originalPath);
+      expect(mockQueue.lastImageSource).toBe(input.originalPath);
     });
 
     it('should add task to queue only after saving to repository', async () => {
