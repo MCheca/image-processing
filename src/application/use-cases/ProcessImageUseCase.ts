@@ -1,7 +1,6 @@
 import { TaskRepository } from '../../domain/repositories/TaskRepository';
 import { ImageProcessor } from '../../domain/services/ImageProcessor';
 import { Task, TaskImage } from '../../domain/entities/Task';
-import * as path from 'path';
 
 export interface ProcessImageInput {
   taskId: string;
@@ -69,9 +68,8 @@ export class ProcessImageUseCase {
     return input.taskId.trim();
   }
 
-  private generateOutputDir(originalPath: string): string {
-    const basename = path.basename(originalPath, path.extname(originalPath));
-    return `/output/${basename}`;
+  private generateOutputDir(_originalPath: string): string {
+    return './output';
   }
 
   private toOutput(task: Task): ProcessImageOutput {

@@ -12,6 +12,14 @@ describe('SharpImageProcessor - Integration Tests', () => {
   // Track all created files and directories for cleanup
   const createdPaths = new Set<string>();
 
+  // Helper to convert API path to filesystem path
+  const toFilesystemPath = (apiPath: string): string => {
+    // API path: '/output/test-image/1024/hash.jpg'
+    // Filesystem: 'tests/fixtures/output/test-image/1024/hash.jpg'
+    const relativePath = apiPath.replace(/^\/output\//, '');
+    return path.join(testOutputDir, relativePath);
+  };
+
   // Helper function to create test images
   const createTestImage = async (
     filename: string,
@@ -204,7 +212,7 @@ describe('SharpImageProcessor - Integration Tests', () => {
       const results = await processor.processImage(sourcePath, testOutputDir, resolutions);
 
       for (const result of results) {
-        const fullPath = path.join(testOutputDir, result.path);
+        const fullPath = toFilesystemPath(result.path);
         const metadata = await sharp(fullPath).metadata();
 
         const expectedWidth = parseInt(result.resolution);
@@ -221,7 +229,7 @@ describe('SharpImageProcessor - Integration Tests', () => {
 
       const results = await processor.processImage(sourcePath, testOutputDir, resolutions);
 
-      const fullPath = path.join(testOutputDir, results[0].path);
+      const fullPath = toFilesystemPath(results[0].path);
       const metadata = await sharp(fullPath).metadata();
 
       expect(metadata.width).toBe(1024);
@@ -234,7 +242,7 @@ describe('SharpImageProcessor - Integration Tests', () => {
 
       const results = await processor.processImage(sourcePath, testOutputDir, resolutions);
 
-      const fullPath = path.join(testOutputDir, results[0].path);
+      const fullPath = toFilesystemPath(results[0].path);
       const metadata = await sharp(fullPath).metadata();
 
       expect(metadata.width).toBe(800);
@@ -248,7 +256,7 @@ describe('SharpImageProcessor - Integration Tests', () => {
       const results = await processor.processImage(sourcePath, testOutputDir, resolutions);
 
       const result = results[0];
-      const fullPath = path.join(testOutputDir, result.path);
+      const fullPath = toFilesystemPath(result.path);
       const fileBuffer = await fs.readFile(fullPath);
       const actualMd5 = crypto.createHash('md5').update(fileBuffer).digest('hex');
 
@@ -291,7 +299,7 @@ describe('SharpImageProcessor - Integration Tests', () => {
 
       expect(results[0].path).toMatch(/\.png$/);
 
-      const fullPath = path.join(testOutputDir, results[0].path);
+      const fullPath = toFilesystemPath(results[0].path);
       const metadata = await sharp(fullPath).metadata();
       expect(metadata.format).toBe('png');
     });
@@ -303,7 +311,9 @@ describe('SharpImageProcessor - Integration Tests', () => {
 
       const results = await processor.processImage(sourcePath, nonExistentDir, resolutions);
 
-      const fullPath = path.join(nonExistentDir, results[0].path);
+      // result.path includes '/output/', so convert to filesystem path
+      const relativePath = results[0].path.replace(/^\/output\//, '');
+      const fullPath = path.join(nonExistentDir, relativePath);
       const fileExists = await fs.access(fullPath).then(() => true).catch(() => false);
       expect(fileExists).toBe(true);
 
@@ -404,7 +414,7 @@ describe('SharpImageProcessor - Integration Tests', () => {
 
       const results = await processor.processImage(sourcePath, testOutputDir, resolutions);
 
-      const fullPath = path.join(testOutputDir, results[0].path);
+      const fullPath = toFilesystemPath(results[0].path);
       const fileBuffer = await fs.readFile(fullPath);
       expect(fileBuffer.length).toBeGreaterThan(0);
 
@@ -420,7 +430,7 @@ describe('SharpImageProcessor - Integration Tests', () => {
       const results = await processor.processImage(specialPath, testOutputDir, resolutions);
 
       expect(results[0].path).toBeDefined();
-      const fullPath = path.join(testOutputDir, results[0].path);
+      const fullPath = toFilesystemPath(results[0].path);
       const fileExists = await fs.access(fullPath).then(() => true).catch(() => false);
       expect(fileExists).toBe(true);
     });
@@ -432,7 +442,7 @@ describe('SharpImageProcessor - Integration Tests', () => {
       const results = await processor.processImage(unicodePath, testOutputDir, resolutions);
 
       expect(results[0].path).toBeDefined();
-      const fullPath = path.join(testOutputDir, results[0].path);
+      const fullPath = toFilesystemPath(results[0].path);
       const fileExists = await fs.access(fullPath).then(() => true).catch(() => false);
       expect(fileExists).toBe(true);
 
@@ -451,7 +461,7 @@ describe('SharpImageProcessor - Integration Tests', () => {
 
       expect(results[0].path).toMatch(/\.webp$/);
 
-      const fullPath = path.join(testOutputDir, results[0].path);
+      const fullPath = toFilesystemPath(results[0].path);
       const metadata = await sharp(fullPath).metadata();
       expect(metadata.format).toBe('webp');
       expect(metadata.width).toBe(1024);
@@ -467,7 +477,7 @@ describe('SharpImageProcessor - Integration Tests', () => {
 
       for (const result of results) {
         expect(result.path).toMatch(/\.webp$/);
-        const fullPath = path.join(testOutputDir, result.path);
+        const fullPath = toFilesystemPath(result.path);
         const metadata = await sharp(fullPath).metadata();
         expect(metadata.format).toBe('webp');
       }

@@ -1,5 +1,6 @@
 import { Task } from '../../../src/domain/entities/Task';
 import { TaskRepository } from '../../../src/domain/repositories/TaskRepository';
+import { ITaskQueue } from '../../../src/domain/services/ITaskQueue';
 import { CreateTaskUseCase, CreateTaskInput } from '../../../src/application/use-cases/CreateTaskUseCase';
 
 // Mock Repository
@@ -33,17 +34,45 @@ class MockTaskRepository implements TaskRepository {
   }
 }
 
+// Mock Task Queue
+class MockTaskQueue implements ITaskQueue {
+  public addTaskCalled = false;
+  public lastTaskId: string | null = null;
+  public lastImagePath: string | null = null;
+  public shouldFailOnAdd = false;
+
+  async addTask(taskId: string, imagePath: string): Promise<void> {
+    this.addTaskCalled = true;
+    this.lastTaskId = taskId;
+    this.lastImagePath = imagePath;
+
+    if (this.shouldFailOnAdd) {
+      throw new Error('Queue error: Failed to add task');
+    }
+  }
+
+  reset(): void {
+    this.addTaskCalled = false;
+    this.lastTaskId = null;
+    this.lastImagePath = null;
+    this.shouldFailOnAdd = false;
+  }
+}
+
 describe('CreateTaskUseCase', () => {
   let createTaskUseCase: CreateTaskUseCase;
   let mockRepository: MockTaskRepository;
+  let mockQueue: MockTaskQueue;
 
   beforeEach(() => {
     mockRepository = new MockTaskRepository();
-    createTaskUseCase = new CreateTaskUseCase(mockRepository);
+    mockQueue = new MockTaskQueue();
+    createTaskUseCase = new CreateTaskUseCase(mockRepository, mockQueue);
   });
 
   afterEach(() => {
     mockRepository.reset();
+    mockQueue.reset();
   });
 
   describe('successful task creation', () => {
@@ -393,6 +422,66 @@ describe('CreateTaskUseCase', () => {
       expect(savedTask.images).toEqual([]);
       expect(savedTask.createdAt.getTime()).toBe(savedTask.updatedAt.getTime());
       expect(savedTask.errorMessage).toBeUndefined();
+    });
+  });
+
+  describe('task queue integration', () => {
+    it('should add task to queue after creation', async () => {
+      const input: CreateTaskInput = {
+        originalPath: '/input/test-image.jpg',
+      };
+
+      await createTaskUseCase.execute(input);
+
+      expect(mockQueue.addTaskCalled).toBe(true);
+    });
+
+    it('should pass correct taskId and imagePath to queue', async () => {
+      const input: CreateTaskInput = {
+        originalPath: '/input/test-image.jpg',
+      };
+
+      const output = await createTaskUseCase.execute(input);
+
+      expect(mockQueue.lastTaskId).toBe(output.taskId);
+      expect(mockQueue.lastImagePath).toBe(input.originalPath);
+    });
+
+    it('should add task to queue only after saving to repository', async () => {
+      const input: CreateTaskInput = {
+        originalPath: '/input/test-image.jpg',
+      };
+
+      await createTaskUseCase.execute(input);
+
+      // Both should be called
+      expect(mockRepository.saveCalled).toBe(true);
+      expect(mockQueue.addTaskCalled).toBe(true);
+    });
+
+    it('should not add to queue if repository save fails', async () => {
+      mockRepository.shouldFailOnSave = true;
+
+      const input: CreateTaskInput = {
+        originalPath: '/input/test-image.jpg',
+      };
+
+      await expect(createTaskUseCase.execute(input)).rejects.toThrow();
+
+      // Queue should not be called if save fails
+      expect(mockQueue.addTaskCalled).toBe(false);
+    });
+
+    it('should propagate queue errors', async () => {
+      mockQueue.shouldFailOnAdd = true;
+
+      const input: CreateTaskInput = {
+        originalPath: '/input/test-image.jpg',
+      };
+
+      await expect(createTaskUseCase.execute(input)).rejects.toThrow(
+        'Queue error: Failed to add task'
+      );
     });
   });
 });

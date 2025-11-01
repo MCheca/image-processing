@@ -124,7 +124,7 @@ export class SharpImageProcessor implements ImageProcessor {
     // Generate MD5 hash
     const md5Hash = this.generateMD5(resizedBuffer);
 
-    // Build relative path: {originalName}/{resolution}/{md5}.{ext}
+    // Build relative path from output dir: {originalName}/{resolution}/{md5}.{ext}
     // Use path.posix for forward slashes (cross-platform, URL-safe, database-friendly)
     const relativePath = path.posix.join(
       originalName,
@@ -141,9 +141,12 @@ export class SharpImageProcessor implements ImageProcessor {
     // Write resized image to disk
     await fs.writeFile(fullOutputPath, resizedBuffer);
 
+    // Build API path: /output/{originalName}/{resolution}/{md5}.{ext}
+    const apiPath = path.posix.join('/output', relativePath);
+
     return {
       resolution: targetWidth.toString(),
-      path: relativePath,
+      path: apiPath,
     };
   }
 

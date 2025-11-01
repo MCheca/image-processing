@@ -151,14 +151,14 @@ describe('ProcessImageUseCase', () => {
       expect(mockRepository.saveCallCount).toBe(1);
     });
 
-    it('should generate output directory based on original filename', async () => {
+    it('should generate output directory as ./output', async () => {
       const task = Task.create('/input/my-photo.jpg');
       mockRepository.addTask(task);
 
       const input: ProcessImageInput = { taskId: task.id };
       await processImageUseCase.execute(input);
 
-      expect(mockImageProcessor.lastOutputDir).toContain('my-photo');
+      expect(mockImageProcessor.lastOutputDir).toBe('./output');
     });
 
     it('should handle path with complex filename', async () => {
