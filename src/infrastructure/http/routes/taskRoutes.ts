@@ -1,11 +1,17 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { TaskController } from '../controllers/TaskController';
 import { createTaskSchema, getTaskSchema } from '../schemas/taskSchemas';
 
-export const registerTaskRoutes = (
+export interface TaskRoutesOptions extends FastifyPluginOptions {
+  taskController: TaskController;
+}
+
+export async function taskRoutes(
   server: FastifyInstance,
-  taskController: TaskController
-): void => {
+  options: TaskRoutesOptions
+): Promise<void> {
+  const { taskController } = options;
+
   // POST /tasks - Create a new task
   server.post(
     '/tasks',
@@ -27,4 +33,4 @@ export const registerTaskRoutes = (
       await taskController.getTask(request, reply);
     }
   );
-};
+}

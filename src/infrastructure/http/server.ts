@@ -2,16 +2,17 @@ import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
-import mongoose from 'mongoose';
 import { createContainer } from '../di/container';
-import { registerTaskRoutes } from './routes/taskRoutes';
+import { taskRoutes } from './routes/taskRoutes';
+import { healthRoutes } from './routes/healthRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { errorResponseSchema } from './schemas/taskSchemas';
+import { config } from '../config';
 
 export const createServer = async (): Promise<FastifyInstance> => {
   const server = Fastify({
     logger: {
-      level: process.env.LOG_LEVEL || 'info',
+      level: config.LOG_LEVEL,
     },
     bodyLimit: 10 * 1024 * 1024, // 10MB limit
     caseSensitive: true,
@@ -19,7 +20,7 @@ export const createServer = async (): Promise<FastifyInstance> => {
     requestIdHeader: 'x-request-id',
     requestIdLogLabel: 'reqId',
     disableRequestLogging: false,
-    trustProxy: process.env.TRUST_PROXY === 'true',
+    trustProxy: config.TRUST_PROXY,
   });
 
   // Register error response schema
@@ -27,10 +28,10 @@ export const createServer = async (): Promise<FastifyInstance> => {
 
   // Register CORS
   await server.register(cors, {
-    origin: process.env.CORS_ORIGIN || '*',
+    origin: config.CORS_ORIGIN,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: process.env.CORS_CREDENTIALS === 'true',
+    credentials: config.CORS_CREDENTIALS,
     maxAge: 86400, // 24 hours
   });
 
@@ -48,8 +49,8 @@ export const createServer = async (): Promise<FastifyInstance> => {
 
   // Register rate limiting
   await server.register(rateLimit, {
-    max: parseInt(process.env.RATE_LIMIT_MAX || '100', 10),
-    timeWindow: process.env.RATE_LIMIT_WINDOW || '15 minutes',
+    max: config.RATE_LIMIT_MAX,
+    timeWindow: config.RATE_LIMIT_WINDOW,
     cache: 10000,
     allowList: ['127.0.0.1'],
     errorResponseBuilder: (_req, context) => ({
@@ -64,22 +65,12 @@ export const createServer = async (): Promise<FastifyInstance> => {
   // Set error handler
   server.setErrorHandler(errorHandler);
 
-  // Connect to MongoDB
-  const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/image-processing';
-  await mongoose.connect(mongoUri);
-  server.log.info('Connected to MongoDB');
-
   // Create dependency injection container
   const container = createContainer();
 
   // Register routes
-  registerTaskRoutes(server, container.taskController);
-
-  // Graceful shutdown
-  server.addHook('onClose', async () => {
-    await mongoose.connection.close();
-    server.log.info('MongoDB connection closed');
-  });
+  await server.register(healthRoutes);
+  await server.register(taskRoutes, { taskController: container.taskController });
 
   return server;
 };
