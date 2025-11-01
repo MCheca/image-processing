@@ -4,6 +4,8 @@ import { Task, TaskImage } from '../../domain/entities/Task';
 
 export interface ProcessImageInput {
   taskId: string;
+  imageSource?: string | Buffer;
+  filename?: string;
 }
 
 export interface ProcessImageOutput {
@@ -37,10 +39,15 @@ export class ProcessImageUseCase {
     try {
       const outputDir = this.generateOutputDir(task.originalPath);
 
+      // Use provided imageSource (Buffer or path), otherwise fall back to task.originalPath
+      const source = input.imageSource || task.originalPath;
+      const filename = input.filename;
+
       const images = await this.imageProcessor.processImage(
-        task.originalPath,
+        source,
         outputDir,
-        ProcessImageUseCase.DEFAULT_RESOLUTIONS
+        ProcessImageUseCase.DEFAULT_RESOLUTIONS,
+        filename
       );
 
       if (!images || images.length === 0) {

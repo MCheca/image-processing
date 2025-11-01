@@ -1,3 +1,3 @@
 export interface ITaskQueue {
-  addTask(taskId: string, imagePath: string): Promise<void>;
+  addTask(taskId: string, imageSource: string | Buffer, filename?: string): Promise<void>;
 }

@@ -9,28 +9,31 @@ import { ImageFormatRegistry } from './formats/ImageFormatRegistry';
 export class SharpImageProcessor implements ImageProcessor {
   private readonly formatRegistry = new ImageFormatRegistry();
   async processImage(
-    sourcePath: string,
+    source: string | Buffer,
     outputDir: string,
-    resolutions: number[]
+    resolutions: number[],
+    originalFilename?: string
   ): Promise<TaskImage[]> {
     // Validate inputs
-    this.validateInputs(sourcePath, resolutions);
+    this.validateInputs(source, resolutions);
 
-    // Verify source file exists
-    await this.verifySourceExists(sourcePath);
+    // Verify source file exists (only for string paths)
+    if (typeof source === 'string') {
+      await this.verifySourceExists(source);
+    }
 
     // Get source image metadata
-    const metadata = await this.getImageMetadata(sourcePath);
+    const metadata = await this.getImageMetadata(source);
 
     // Extract original filename and extension
-    const { originalName, extension } = this.parseFileName(sourcePath);
+    const { originalName, extension } = this.parseFileName(source, originalFilename);
 
     // Process each resolution
     const results: TaskImage[] = [];
 
     for (const resolution of resolutions) {
       const processedImage = await this.processResolution(
-        sourcePath,
+        source,
         outputDir,
         originalName,
         extension,
@@ -43,9 +46,13 @@ export class SharpImageProcessor implements ImageProcessor {
     return results;
   }
 
-  private validateInputs(sourcePath: string, resolutions: number[]): void {
-    if (!sourcePath || sourcePath.trim() === '') {
+  private validateInputs(source: string | Buffer, resolutions: number[]): void {
+    if (typeof source === 'string' && (!source || source.trim() === '')) {
       throw new Error('Source path cannot be empty');
+    }
+
+    if (Buffer.isBuffer(source) && source.length === 0) {
+      throw new Error('Source buffer cannot be empty');
     }
 
     if (!resolutions || resolutions.length === 0) {
@@ -67,9 +74,9 @@ export class SharpImageProcessor implements ImageProcessor {
     }
   }
 
-  private async getImageMetadata(sourcePath: string): Promise<sharp.Metadata> {
+  private async getImageMetadata(source: string | Buffer): Promise<sharp.Metadata> {
     try {
-      return await sharp(sourcePath).metadata();
+      return await sharp(source).metadata();
     } catch (error) {
       if (error instanceof Error) {
         throw new Error(`Failed to read image metadata: ${error.message}`);
@@ -78,8 +85,28 @@ export class SharpImageProcessor implements ImageProcessor {
     }
   }
 
-  private parseFileName(filePath: string): { originalName: string; extension: string } {
-    const fileName = path.basename(filePath);
+  private parseFileName(
+    source: string | Buffer,
+    originalFilename?: string
+  ): { originalName: string; extension: string } {
+    // For Buffer, use provided filename or default
+    if (Buffer.isBuffer(source)) {
+      if (!originalFilename) {
+        return {
+          originalName: 'image',
+          extension: '.jpg',
+        };
+      }
+      const extName = path.extname(originalFilename);
+      const nameWithoutExt = path.basename(originalFilename, extName);
+      return {
+        originalName: nameWithoutExt,
+        extension: extName.toLowerCase() || '.jpg',
+      };
+    }
+
+    // For string paths
+    const fileName = path.basename(source);
     const extName = path.extname(fileName);
     const nameWithoutExt = path.basename(fileName, extName);
 
@@ -90,7 +117,7 @@ export class SharpImageProcessor implements ImageProcessor {
   }
 
   private async processResolution(
-    sourcePath: string,
+    source: string | Buffer,
     outputDir: string,
     originalName: string,
     extension: string,
@@ -106,7 +133,7 @@ export class SharpImageProcessor implements ImageProcessor {
     let outputExtension = extension;
     try {
       const result = await this.resizeImage(
-        sourcePath,
+        source,
         targetWidth,
         targetHeight,
         metadata.format!,
@@ -151,13 +178,13 @@ export class SharpImageProcessor implements ImageProcessor {
   }
 
   private async resizeImage(
-    sourcePath: string,
+    source: string | Buffer,
     width: number,
     height: number,
     format: string,
     originalExtension: string
   ): Promise<{ buffer: Buffer; extension: string }> {
-    const pipeline = sharp(sourcePath).resize(width, height, {
+    const pipeline = sharp(source).resize(width, height, {
       fit: 'fill', // Use exact dimensions (aspect ratio pre-calculated to avoid distortion)
       withoutEnlargement: false, // Allow upscaling smaller images to target resolution
     });

@@ -4,9 +4,11 @@ import { ProcessImageUseCase } from '../../application/use-cases/ProcessImageUse
 export class SyncTaskQueue implements ITaskQueue {
   constructor(private readonly processImageUseCase: ProcessImageUseCase) {}
 
-  async addTask(taskId: string, _imagePath: string): Promise<void> {
+  async addTask(taskId: string, imageSource: string | Buffer, filename?: string): Promise<void> {
     await this.processImageUseCase.execute({
       taskId,
+      imageSource,
+      filename,
     });
   }
 }

@@ -2,8 +2,9 @@ import { TaskImage } from '../entities/Task';
 
 export interface ImageProcessor {
   processImage(
-    sourcePath: string,
+    source: string | Buffer,
     outputDir: string,
-    resolutions: number[]
+    resolutions: number[],
+    originalFilename?: string
   ): Promise<TaskImage[]>;
 }
