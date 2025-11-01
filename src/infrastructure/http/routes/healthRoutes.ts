@@ -1,52 +1,51 @@
-import { FastifyInstance } from 'fastify';
-import { DatabaseConnection } from '../../persistence/database';
+import { FastifyInstance, FastifyPluginOptions } from 'fastify';
+import { HealthController } from '../controllers/HealthController';
+import {
+  livenessCheckSchema,
+  readinessCheckSchema,
+  detailedHealthCheckSchema,
+} from '../schemas/healthSchemas';
 
-export async function healthRoutes(server: FastifyInstance): Promise<void> {
-  // Liveness probe - is the app running?
-  server.get('/health/live', async (_request, reply) => {
-    reply.code(200).send({
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-    });
-  });
+export interface HealthRoutesOptions extends FastifyPluginOptions {
+  healthController: HealthController;
+}
 
-  // Readiness probe - is the app ready to serve traffic?
-  server.get('/health/ready', async (_request, reply) => {
-    const database = DatabaseConnection.getInstance();
+export async function healthRoutes(
+  server: FastifyInstance,
+  options: HealthRoutesOptions
+): Promise<void> {
+  const { healthController } = options;
 
-    const checks = {
-      database: database.isReady(),
-    };
+  // GET /health/live - Liveness probe
+  server.get(
+    '/health/live',
+    {
+      schema: livenessCheckSchema,
+    },
+    async (request, reply) => {
+      await healthController.livenessCheck(request, reply);
+    }
+  );
 
-    const isReady = Object.values(checks).every((check) => check === true);
+  // GET /health/ready - Readiness probe
+  server.get(
+    '/health/ready',
+    {
+      schema: readinessCheckSchema,
+    },
+    async (request, reply) => {
+      await healthController.readinessCheck(request, reply);
+    }
+  );
 
-    reply.code(isReady ? 200 : 503).send({
-      status: isReady ? 'ready' : 'not ready',
-      checks,
-      timestamp: new Date().toISOString(),
-    });
-  });
-
-  // Detailed health check
-  server.get('/health', async (_request, reply) => {
-    const database = DatabaseConnection.getInstance();
-    const uptime = process.uptime();
-    const memoryUsage = process.memoryUsage();
-
-    reply.send({
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      uptime: `${Math.floor(uptime / 60)} minutes`,
-      environment: process.env.NODE_ENV || 'development',
-      database: {
-        connected: database.isReady(),
-        name: database.getConnectionName(),
-      },
-      memory: {
-        rss: `${Math.round(memoryUsage.rss / 1024 / 1024)} MB`,
-        heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)} MB`,
-        heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)} MB`,
-      },
-    });
-  });
+  // GET /health - Detailed health check
+  server.get(
+    '/health',
+    {
+      schema: detailedHealthCheckSchema,
+    },
+    async (request, reply) => {
+      await healthController.detailedHealthCheck(request, reply);
+    }
+  );
 }

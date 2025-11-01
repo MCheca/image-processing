@@ -1,4 +1,5 @@
 import { TaskController } from '../http/controllers/TaskController';
+import { HealthController } from '../http/controllers/HealthController';
 import { CreateTaskUseCase } from '../../application/use-cases/CreateTaskUseCase';
 import { GetTaskUseCase } from '../../application/use-cases/GetTaskUseCase';
 import { ProcessImageUseCase } from '../../application/use-cases/ProcessImageUseCase';
@@ -6,9 +7,11 @@ import { MongoTaskRepository } from '../repositories/MongoTaskRepository';
 import { SharpImageProcessor } from '../services/SharpImageProcessor';
 import { HttpImageDownloader } from '../services/HttpImageDownloader';
 import { SyncTaskQueue } from '../queues/SyncTaskQueue';
+import { DatabaseConnection } from '../persistence/database';
 
 export interface Container {
   taskController: TaskController;
+  healthController: HealthController;
 }
 
 export const createContainer = (): Container => {
@@ -27,8 +30,11 @@ export const createContainer = (): Container => {
 
   // Controllers
   const taskController = new TaskController(createTaskUseCase, getTaskUseCase);
+  const database = DatabaseConnection.getInstance();
+  const healthController = new HealthController(database);
 
   return {
     taskController,
+    healthController,
   };
 };
