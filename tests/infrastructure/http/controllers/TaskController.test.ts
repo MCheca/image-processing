@@ -164,78 +164,71 @@ describe('TaskController', () => {
     });
 
     describe('input validation', () => {
-      it('should return 400 when originalPath is missing', async () => {
+      it('should throw ValidationError when originalPath is missing', async () => {
         const request = createMockRequest(undefined, {});
         const reply = createMockReply();
 
-        await taskController.createTask(request as FastifyRequest, reply as FastifyReply);
-
-        expect(reply.code).toHaveBeenCalledWith(400);
-        expect(reply.payload).toHaveProperty('error');
+        await expect(
+          taskController.createTask(request as FastifyRequest, reply as FastifyReply)
+        ).rejects.toThrow('originalPath is required and cannot be empty');
       });
 
-      it('should return 400 when originalPath is empty string', async () => {
+      it('should throw ValidationError when originalPath is empty string', async () => {
         const request = createMockRequest(undefined, { originalPath: '' });
         const reply = createMockReply();
-        mockCreateTaskUseCase.shouldFail = true;
 
-        await taskController.createTask(request as FastifyRequest, reply as FastifyReply);
-
-        expect(reply.code).toHaveBeenCalledWith(400);
-        expect(reply.payload).toHaveProperty('error');
+        await expect(
+          taskController.createTask(request as FastifyRequest, reply as FastifyReply)
+        ).rejects.toThrow('originalPath is required and cannot be empty');
       });
 
-      it('should return 400 when originalPath is null', async () => {
+      it('should throw ValidationError when originalPath is null', async () => {
         const request = createMockRequest(undefined, { originalPath: null });
         const reply = createMockReply();
 
-        await taskController.createTask(request as FastifyRequest, reply as FastifyReply);
-
-        expect(reply.code).toHaveBeenCalledWith(400);
-        expect(reply.payload).toHaveProperty('error');
+        await expect(
+          taskController.createTask(request as FastifyRequest, reply as FastifyReply)
+        ).rejects.toThrow('originalPath is required and cannot be empty');
       });
 
-      it('should return 400 when request body is missing', async () => {
+      it('should throw ValidationError when request body is missing', async () => {
         const request = createMockRequest(undefined, undefined);
         const reply = createMockReply();
 
-        await taskController.createTask(request as FastifyRequest, reply as FastifyReply);
-
-        expect(reply.code).toHaveBeenCalledWith(400);
-        expect(reply.payload).toHaveProperty('error');
+        await expect(
+          taskController.createTask(request as FastifyRequest, reply as FastifyReply)
+        ).rejects.toThrow('originalPath is required and cannot be empty');
       });
 
-      it('should include error message in 400 response', async () => {
+      it('should include error message in validation error', async () => {
         const request = createMockRequest(undefined, {});
         const reply = createMockReply();
 
-        await taskController.createTask(request as FastifyRequest, reply as FastifyReply);
-
-        expect(reply.payload.error).toBeDefined();
-        expect(typeof reply.payload.error).toBe('string');
+        await expect(
+          taskController.createTask(request as FastifyRequest, reply as FastifyReply)
+        ).rejects.toThrow('originalPath is required and cannot be empty');
       });
     });
 
     describe('error handling', () => {
-      it('should return 500 when use case throws unexpected error', async () => {
+      it('should throw error when use case throws unexpected error', async () => {
         mockCreateTaskUseCase.execute = jest.fn().mockRejectedValue(new Error('Database error'));
         const request = createMockRequest(undefined, { originalPath: '/input/test-image.jpg' });
         const reply = createMockReply();
 
-        await taskController.createTask(request as FastifyRequest, reply as FastifyReply);
-
-        expect(reply.code).toHaveBeenCalledWith(500);
-        expect(reply.payload).toHaveProperty('error');
+        await expect(
+          taskController.createTask(request as FastifyRequest, reply as FastifyReply)
+        ).rejects.toThrow('Database error');
       });
 
-      it('should include error message in 500 response', async () => {
+      it('should propagate error message when use case fails', async () => {
         mockCreateTaskUseCase.execute = jest.fn().mockRejectedValue(new Error('Database error'));
         const request = createMockRequest(undefined, { originalPath: '/input/test-image.jpg' });
         const reply = createMockReply();
 
-        await taskController.createTask(request as FastifyRequest, reply as FastifyReply);
-
-        expect(reply.payload.error).toBe('Database error');
+        await expect(
+          taskController.createTask(request as FastifyRequest, reply as FastifyReply)
+        ).rejects.toThrow('Database error');
       });
     });
   });
@@ -301,80 +294,75 @@ describe('TaskController', () => {
     });
 
     describe('task not found', () => {
-      it('should return 404 when task does not exist', async () => {
+      it('should throw NotFoundError when task does not exist', async () => {
         mockGetTaskUseCase.shouldThrowNotFound = true;
         const request = createMockRequest({ taskId: 'non-existent-id' });
         const reply = createMockReply();
 
-        await taskController.getTask(request as FastifyRequest, reply as FastifyReply);
-
-        expect(reply.code).toHaveBeenCalledWith(404);
-        expect(reply.payload).toHaveProperty('error');
+        await expect(
+          taskController.getTask(request as FastifyRequest, reply as FastifyReply)
+        ).rejects.toThrow('Task not found');
       });
 
-      it('should include error message in 404 response', async () => {
+      it('should include error message in NotFoundError', async () => {
         mockGetTaskUseCase.shouldThrowNotFound = true;
         const request = createMockRequest({ taskId: 'non-existent-id' });
         const reply = createMockReply();
 
-        await taskController.getTask(request as FastifyRequest, reply as FastifyReply);
-
-        expect(reply.payload.error).toContain('not found');
+        await expect(
+          taskController.getTask(request as FastifyRequest, reply as FastifyReply)
+        ).rejects.toThrow('not found');
       });
     });
 
     describe('input validation', () => {
-      it('should return 400 when taskId is missing', async () => {
+      it('should throw ValidationError when taskId is missing', async () => {
         const request = createMockRequest({});
         const reply = createMockReply();
 
-        await taskController.getTask(request as FastifyRequest, reply as FastifyReply);
-
-        expect(reply.code).toHaveBeenCalledWith(400);
-        expect(reply.payload).toHaveProperty('error');
+        await expect(
+          taskController.getTask(request as FastifyRequest, reply as FastifyReply)
+        ).rejects.toThrow('taskId is required and cannot be empty');
       });
 
-      it('should return 400 when taskId is empty string', async () => {
+      it('should throw ValidationError when taskId is empty string', async () => {
         const request = createMockRequest({ taskId: '' });
         const reply = createMockReply();
 
-        await taskController.getTask(request as FastifyRequest, reply as FastifyReply);
-
-        expect(reply.code).toHaveBeenCalledWith(400);
-        expect(reply.payload).toHaveProperty('error');
+        await expect(
+          taskController.getTask(request as FastifyRequest, reply as FastifyReply)
+        ).rejects.toThrow('taskId is required and cannot be empty');
       });
 
-      it('should return 400 when taskId is null', async () => {
+      it('should throw ValidationError when taskId is null', async () => {
         const request = createMockRequest({ taskId: null });
         const reply = createMockReply();
 
-        await taskController.getTask(request as FastifyRequest, reply as FastifyReply);
-
-        expect(reply.code).toHaveBeenCalledWith(400);
-        expect(reply.payload).toHaveProperty('error');
+        await expect(
+          taskController.getTask(request as FastifyRequest, reply as FastifyReply)
+        ).rejects.toThrow('taskId is required and cannot be empty');
       });
     });
 
     describe('error handling', () => {
-      it('should return 500 when use case throws unexpected error', async () => {
+      it('should throw error when use case throws unexpected error', async () => {
         mockGetTaskUseCase.shouldFail = true;
         const request = createMockRequest({ taskId: '65d4a54b-89c5-e342-b2c2-c5f6abcdef12' });
         const reply = createMockReply();
 
-        await taskController.getTask(request as FastifyRequest, reply as FastifyReply);
-
-        expect(reply.code).toHaveBeenCalledWith(500);
-        expect(reply.payload).toHaveProperty('error');
+        await expect(
+          taskController.getTask(request as FastifyRequest, reply as FastifyReply)
+        ).rejects.toThrow('Database connection failed');
       });
 
-      it('should include error message in 500 response', async () => {
+      it('should propagate error message when use case fails', async () => {
         mockGetTaskUseCase.shouldFail = true;
         const request = createMockRequest({ taskId: '65d4a54b-89c5-e342-b2c2-c5f6abcdef12' });
         const reply = createMockReply();
 
-        await taskController.getTask(request as FastifyRequest, reply as FastifyReply);
-
-        expect(reply.payload.error).toBe('Database connection failed');
+        await expect(
+          taskController.getTask(request as FastifyRequest, reply as FastifyReply)
+        ).rejects.toThrow('Database connection failed');
       });
     });
   });
@@ -407,10 +395,12 @@ describe('TaskController', () => {
       const failReply = createMockReply();
 
       await taskController.createTask(successRequest as FastifyRequest, successReply as FastifyReply);
-      await taskController.createTask(failRequest as FastifyRequest, failReply as FastifyReply);
+
+      await expect(
+        taskController.createTask(failRequest as FastifyRequest, failReply as FastifyReply)
+      ).rejects.toThrow('originalPath is required and cannot be empty');
 
       expect(successReply.code).toHaveBeenCalledWith(201);
-      expect(failReply.code).toHaveBeenCalledWith(400);
     });
   });
 
@@ -464,33 +454,33 @@ describe('TaskController', () => {
     });
 
 
-    it('should return 400 for invalid input', async () => {
+    it('should throw ValidationError for invalid input', async () => {
       const request = createMockRequest(undefined, {});
       const reply = createMockReply();
 
-      await taskController.createTask(request as FastifyRequest, reply as FastifyReply);
-
-      expect(reply.code).toHaveBeenCalledWith(400);
+      await expect(
+        taskController.createTask(request as FastifyRequest, reply as FastifyReply)
+      ).rejects.toThrow('originalPath is required and cannot be empty');
     });
 
-    it('should return 404 for task not found', async () => {
+    it('should throw NotFoundError for task not found', async () => {
       mockGetTaskUseCase.shouldThrowNotFound = true;
       const request = createMockRequest({ taskId: 'non-existent-id' });
       const reply = createMockReply();
 
-      await taskController.getTask(request as FastifyRequest, reply as FastifyReply);
-
-      expect(reply.code).toHaveBeenCalledWith(404);
+      await expect(
+        taskController.getTask(request as FastifyRequest, reply as FastifyReply)
+      ).rejects.toThrow('Task not found');
     });
 
-    it('should return 500 for server errors', async () => {
+    it('should throw error for server errors', async () => {
       mockGetTaskUseCase.shouldFail = true;
       const request = createMockRequest({ taskId: '65d4a54b-89c5-e342-b2c2-c5f6abcdef12' });
       const reply = createMockReply();
 
-      await taskController.getTask(request as FastifyRequest, reply as FastifyReply);
-
-      expect(reply.code).toHaveBeenCalledWith(500);
+      await expect(
+        taskController.getTask(request as FastifyRequest, reply as FastifyReply)
+      ).rejects.toThrow('Database connection failed');
     });
   });
 
@@ -518,14 +508,13 @@ describe('TaskController', () => {
       expect(reply.payload).toHaveProperty('images');
     });
 
-    it('should return JSON error response for failures', async () => {
+    it('should throw error for failures', async () => {
       const request = createMockRequest(undefined, {});
       const reply = createMockReply();
 
-      await taskController.createTask(request as FastifyRequest, reply as FastifyReply);
-
-      expect(reply.payload).toHaveProperty('error');
-      expect(typeof reply.payload.error).toBe('string');
+      await expect(
+        taskController.createTask(request as FastifyRequest, reply as FastifyReply)
+      ).rejects.toThrow();
     });
   });
 });

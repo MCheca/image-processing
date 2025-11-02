@@ -1,6 +1,7 @@
 import { TaskRepository } from '../../domain/repositories/TaskRepository';
 import { ImageProcessor } from '../../domain/services/ImageProcessor';
 import { Task, TaskImage } from '../../domain/entities/Task';
+import { getConfig } from '../../infrastructure/config';
 
 export interface ProcessImageInput {
   taskId: string;
@@ -17,11 +18,14 @@ export interface ProcessImageOutput {
 
 export class ProcessImageUseCase {
   private static readonly DEFAULT_RESOLUTIONS = [1024, 800];
+  private readonly outputDir: string;
 
   constructor(
     private readonly taskRepository: TaskRepository,
     private readonly imageProcessor: ImageProcessor
-  ) {}
+  ) {
+    this.outputDir = getConfig().OUTPUT_DIR;
+  }
 
   async execute(input: ProcessImageInput): Promise<ProcessImageOutput> {
     const taskId = this.validateAndNormalizeInput(input);
@@ -76,7 +80,7 @@ export class ProcessImageUseCase {
   }
 
   private generateOutputDir(_originalPath: string): string {
-    return './output';
+    return this.outputDir;
   }
 
   private toOutput(task: Task): ProcessImageOutput {

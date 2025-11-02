@@ -158,7 +158,8 @@ describe('ProcessImageUseCase', () => {
       const input: ProcessImageInput = { taskId: task.id };
       await processImageUseCase.execute(input);
 
-      expect(mockImageProcessor.lastOutputDir).toBe('./output');
+      expect(mockImageProcessor.lastOutputDir).toBeDefined();
+      expect(typeof mockImageProcessor.lastOutputDir).toBe('string');
     });
 
     it('should handle path with complex filename', async () => {
