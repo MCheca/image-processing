@@ -9,7 +9,7 @@ export class HttpImageDownloader implements IImageDownloader {
     return path.startsWith('http://') || path.startsWith('https://');
   }
 
-  async downloadImage(url: string): Promise<{ buffer: Buffer; filename: string }> {
+  async downloadImage(url: string, maxRedirects: number = 5): Promise<{ buffer: Buffer; filename: string }> {
     const extension = this.extractExtension(url);
     const filename = `${randomUUID()}${extension}`;
 
@@ -19,6 +19,27 @@ export class HttpImageDownloader implements IImageDownloader {
 
       protocol
         .get(url, (response) => {
+          // Handle redirects (301, 302, 307, 308)
+          if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400) {
+            const redirectUrl = response.headers.location;
+
+            if (!redirectUrl) {
+              reject(new Error(`Redirect without location header: HTTP ${response.statusCode}`));
+              return;
+            }
+
+            if (maxRedirects <= 0) {
+              reject(new Error('Too many redirects'));
+              return;
+            }
+
+            // Follow the redirect
+            this.downloadImage(redirectUrl, maxRedirects - 1)
+              .then(resolve)
+              .catch(reject);
+            return;
+          }
+
           if (response.statusCode !== 200) {
             reject(
               new Error(
