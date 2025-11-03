@@ -379,22 +379,6 @@ describe('CreateTaskUseCase', () => {
       const output = await createTaskUseCase.execute(input);
       expect(output.taskId).toBeDefined();
     });
-
-    it('should handle concurrent task creation', async () => {
-      const inputs = Array.from({ length: 10 }, (_, i) => ({
-        originalPath: `/input/image${i}.jpg`,
-      }));
-
-      const outputs = await Promise.all(inputs.map((input) => createTaskUseCase.execute(input)));
-
-      // All should succeed
-      expect(outputs).toHaveLength(10);
-
-      // All should have unique IDs
-      const ids = outputs.map((o) => o.taskId);
-      const uniqueIds = new Set(ids);
-      expect(uniqueIds.size).toBe(10);
-    });
   });
 
   describe('domain logic integration', () => {

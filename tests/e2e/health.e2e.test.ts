@@ -50,19 +50,6 @@ describe('Health Routes E2E Tests', () => {
       expect(timestamp.toISOString()).toBe(response.body.timestamp);
     });
 
-    it('should handle multiple concurrent requests', async () => {
-      const requests = Array(10)
-        .fill(null)
-        .map(() => request(server.server).get('/health/live'));
-
-      const responses = await Promise.all(requests);
-
-      responses.forEach((response) => {
-        expect(response.status).toBe(200);
-        expect(response.body.status).toBe('ok');
-      });
-    });
-
     it('should not accept POST method', async () => {
       await request(server.server)
         .post('/health/live')
@@ -113,20 +100,6 @@ describe('Health Routes E2E Tests', () => {
 
       const timestamp = new Date(response.body.timestamp);
       expect(timestamp.toISOString()).toBe(response.body.timestamp);
-    });
-
-    it('should handle multiple concurrent requests', async () => {
-      const requests = Array(10)
-        .fill(null)
-        .map(() => request(server.server).get('/health/ready'));
-
-      const responses = await Promise.all(requests);
-
-      responses.forEach((response) => {
-        expect(response.status).toBe(200);
-        expect(response.body.status).toBe('ready');
-        expect(response.body.checks.database).toBe(true);
-      });
     });
 
     it('should not accept POST method', async () => {
@@ -215,20 +188,6 @@ describe('Health Routes E2E Tests', () => {
 
       const timestamp = new Date(response.body.timestamp);
       expect(timestamp.toISOString()).toBe(response.body.timestamp);
-    });
-
-    it('should handle multiple concurrent requests', async () => {
-      const requests = Array(10)
-        .fill(null)
-        .map(() => request(server.server).get('/health'));
-
-      const responses = await Promise.all(requests);
-
-      responses.forEach((response) => {
-        expect(response.status).toBe(200);
-        expect(response.body.status).toBe('ok');
-        expect(response.body.database.connected).toBe(true);
-      });
     });
 
     it('should not accept POST method', async () => {

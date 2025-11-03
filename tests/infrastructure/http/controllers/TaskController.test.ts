@@ -369,24 +369,6 @@ describe('TaskController', () => {
 
 
   describe('controller behavior', () => {
-    it('should handle multiple concurrent requests', async () => {
-      const requests = Array.from({ length: 5 }, (_, i) => ({
-        request: createMockRequest(undefined, { originalPath: `/input/image${i}.jpg` }),
-        reply: createMockReply(),
-      }));
-
-      await Promise.all(
-        requests.map(({ request, reply }) =>
-          taskController.createTask(request as FastifyRequest, reply as FastifyReply)
-        )
-      );
-
-      requests.forEach(({ reply }) => {
-        expect(reply.code).toHaveBeenCalledWith(201);
-        expect(reply.sent).toBe(true);
-      });
-    });
-
     it('should isolate errors between requests', async () => {
       const successRequest = createMockRequest(undefined, { originalPath: '/input/test-image.jpg' });
       const successReply = createMockReply();

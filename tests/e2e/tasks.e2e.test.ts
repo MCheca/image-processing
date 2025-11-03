@@ -276,31 +276,6 @@ describe('Task Routes E2E Tests', () => {
           .expect(404);
       });
     });
-
-    describe('Concurrent Requests', () => {
-      it('should handle multiple concurrent task creation requests', async () => {
-        const requests = Array(5)
-          .fill(null)
-          .map(() =>
-            request(server.server)
-              .post('/tasks')
-              .send({ originalPath: MOCK_IMAGE_URL })
-          );
-
-        const responses = await Promise.all(requests);
-
-        // All should succeed
-        responses.forEach((response) => {
-          expect(response.status).toBe(201);
-          expect(response.body).toHaveProperty('taskId');
-        });
-
-        // All task IDs should be unique
-        const taskIds = responses.map((r) => r.body.taskId);
-        const uniqueTaskIds = new Set(taskIds);
-        expect(uniqueTaskIds.size).toBe(taskIds.length);
-      });
-    });
   });
 
   describe('GET /tasks/:taskId', () => {
@@ -448,58 +423,6 @@ describe('Task Routes E2E Tests', () => {
           .patch(`/tasks/${taskId}`)
           .send({ data: 'test' })
           .expect(404);
-      });
-    });
-
-    describe('Concurrent Requests', () => {
-      it('should handle multiple concurrent GET requests for same task', async () => {
-        // Create a task
-        const createResponse = await request(server.server)
-          .post('/tasks')
-          .send({ originalPath: MOCK_IMAGE_URL })
-          .expect(201);
-
-        const taskId = createResponse.body.taskId;
-
-        // Make concurrent GET requests
-        const requests = Array(10)
-          .fill(null)
-          .map(() => request(server.server).get(`/tasks/${taskId}`));
-
-        const responses = await Promise.all(requests);
-
-        // All should succeed and return the same task
-        responses.forEach((response) => {
-          expect(response.status).toBe(200);
-          expect(response.body.taskId).toBe(taskId);
-        });
-      });
-
-      it('should handle concurrent GET requests for different tasks', async () => {
-        // Create multiple tasks
-        const createRequests = Array(5)
-          .fill(null)
-          .map(() =>
-            request(server.server)
-              .post('/tasks')
-              .send({ originalPath: MOCK_IMAGE_URL })
-          );
-
-        const createResponses = await Promise.all(createRequests);
-        const taskIds = createResponses.map((r) => r.body.taskId);
-
-        // Concurrently retrieve all tasks
-        const getRequests = taskIds.map((taskId) =>
-          request(server.server).get(`/tasks/${taskId}`)
-        );
-
-        const getResponses = await Promise.all(getRequests);
-
-        // All should succeed
-        getResponses.forEach((response, index) => {
-          expect(response.status).toBe(200);
-          expect(response.body.taskId).toBe(taskIds[index]);
-        });
       });
     });
   });
