@@ -328,7 +328,7 @@ src/
     ├── persistence/          # MongoDB schemas
     ├── repositories/         # Mongo implementations
     ├── services/             # Sharp processor, HTTP downloader
-    └── queues/               # Sync queue (ready for async)
+    └── queues/               # Async queue
 ```
 
 ### Why These Technologies?
@@ -364,55 +364,9 @@ src/
 
 ### High Priority
 
-#### 1. Asynchronous Queue System
-
-**Current:** Synchronous in-memory queue
-**Proposal:** Bull/BullMQ (Redis), RabbitMQ, or AWS SQS
-
-<details>
-<summary>Implementation details</summary>
-
-**Example with BullMQ:**
-
-```typescript
-import { Queue, Worker } from 'bullmq';
-
-class BullTaskQueue implements ITaskQueue {
-  async enqueue(taskId: string): Promise<void> {
-    await this.queue.add(
-      'processImage',
-      { taskId },
-      {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 2000 },
-      },
-    );
-  }
-}
-
-const worker = new Worker('processImage', async (job) => {
-  await processImageUseCase.execute(job.data.taskId);
-});
-```
-
-**Benefits:**
-
-- Multiple workers for parallel processing
-- Job persistence and automatic retries
-- Queue metrics and monitoring
-- Priority-based task processing
-
-**Options Comparison:**
-
-| Solution        | Pros                                          | Cons                        |
-| --------------- | --------------------------------------------- | --------------------------- |
-| **Bull/BullMQ** | Excellent Node.js integration, job scheduling | Requires Redis              |
-| **RabbitMQ**    | Enterprise-grade, complex routing             | Additional service overhead |
-| **AWS SQS**     | Managed service, no infrastructure            | Vendor lock-in, costs       |
-
 </details>
 
-#### 2. Image Caching Layer
+#### 1. Image Caching Layer
 
 **Problem:** Duplicate images are re-processed
 **Solution:** MD5-based cache lookup before processing
@@ -433,7 +387,7 @@ if (cached.length > 0) {
 
 </details>
 
-#### 3. Database Indexing Strategy
+#### 2. Database Indexing Strategy
 
 <details>
 <summary>Proposed indexes</summary>
@@ -452,7 +406,7 @@ db.images.createIndex({ taskId: 1 });
 
 </details>
 
-#### 4. Structured Logging
+#### 3. Structured Logging
 
 **Current:** Console.log statements
 **Proposal:** Pino logger (5-10x faster than Winston)
@@ -474,7 +428,7 @@ logger.info({ taskId, status: 'completed' }, 'Task processing completed');
 ### Medium Priority
 
 <details>
-<summary>5. Cloud Storage Abstraction (S3, GCS, Azure Blob)</summary>
+<summary>4. Cloud Storage Abstraction (S3, GCS, Azure Blob)</summary>
 
 ```typescript
 interface IStorageService {
@@ -494,7 +448,7 @@ class S3StorageService implements IStorageService {
 </details>
 
 <details>
-<summary>6. Webhook Notifications</summary>
+<summary>5. Webhook Notifications</summary>
 
 ```typescript
 // Notify clients when tasks complete
@@ -509,7 +463,7 @@ if (task.webhookUrl) {
 </details>
 
 <details>
-<summary>7. Per-Client Rate Limiting with API Keys</summary>
+<summary>6. Per-Client Rate Limiting with API Keys</summary>
 
 ```typescript
 fastify.addHook('preHandler', async (request, reply) => {
@@ -524,7 +478,7 @@ fastify.addHook('preHandler', async (request, reply) => {
 </details>
 
 <details>
-<summary>8. Batch Processing API</summary>
+<summary>7. Batch Processing API</summary>
 
 ```typescript
 POST /tasks/batch
