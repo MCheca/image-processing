@@ -6,15 +6,27 @@ import { ProcessImageUseCase } from '../../application/use-cases/ProcessImageUse
 import { MongoTaskRepository } from '../repositories/MongoTaskRepository';
 import { SharpImageProcessor } from '../services/SharpImageProcessor';
 import { HttpImageDownloader } from '../services/HttpImageDownloader';
-import { SyncTaskQueue } from '../queues/SyncTaskQueue';
+import { BullMQTaskQueue } from '../queues/BullMQTaskQueue';
+import { BullMQWorker } from '../queues/BullMQWorker';
 import { DatabaseConnection } from '../persistence/database';
+import { config } from '../config';
 
 export interface Container {
   taskController: TaskController;
   healthController: HealthController;
+  worker: BullMQWorker;
+  taskQueue: BullMQTaskQueue;
+  shutdown: () => Promise<void>;
 }
 
 export const createContainer = (): Container => {
+  // Redis configuration
+  const redisConfig = {
+    host: config.REDIS_HOST,
+    port: config.REDIS_PORT,
+    password: config.REDIS_PASSWORD,
+  };
+
   // Repositories
   const taskRepository = new MongoTaskRepository();
 
@@ -24,7 +36,13 @@ export const createContainer = (): Container => {
 
   // Use Cases
   const processImageUseCase = new ProcessImageUseCase(taskRepository, imageProcessor);
-  const taskQueue = new SyncTaskQueue(processImageUseCase);
+
+  // Queue and Worker
+  const taskQueue = new BullMQTaskQueue(redisConfig);
+  const worker = new BullMQWorker(redisConfig, processImageUseCase, {
+    concurrency: config.QUEUE_CONCURRENCY,
+  });
+
   const createTaskUseCase = new CreateTaskUseCase(taskRepository, taskQueue, imageDownloader);
   const getTaskUseCase = new GetTaskUseCase(taskRepository);
 
@@ -33,8 +51,17 @@ export const createContainer = (): Container => {
   const database = DatabaseConnection.getInstance();
   const healthController = new HealthController(database);
 
+  // Shutdown function to close connections gracefully
+  const shutdown = async (): Promise<void> => {
+    await taskQueue.close();
+    await worker.close();
+  };
+
   return {
     taskController,
     healthController,
+    worker,
+    taskQueue,
+    shutdown,
   };
 };

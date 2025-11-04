@@ -34,6 +34,90 @@ describe('Task Routes E2E Tests', () => {
   const mockImagePath = path.join(__dirname, '..', 'fixtures', 'test-image.jpg');
 
   /**
+   * Waits for a BullMQ job to complete and the database to be updated.
+   * First waits for the job to complete in BullMQ, then polls the API
+   * to ensure the database has been updated.
+   */
+  const waitForJobCompletion = async (
+    taskId: string,
+    timeout = 30000,
+  ): Promise<void> => {
+    const startTime = Date.now();
+
+    // Step 1: Wait for job to complete in BullMQ
+    await new Promise<void>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error(`Job for task ${taskId} did not complete in BullMQ within ${timeout}ms`));
+      }, timeout);
+
+      const queue = (server as any).container?.taskQueue?.queue;
+      if (!queue) {
+        clearTimeout(timeoutId);
+        reject(new Error('Queue not available'));
+        return;
+      }
+
+      const checkCompletion = async () => {
+        try {
+          const jobs = await queue.getCompleted();
+          const completedJob = jobs.find((job: any) => job.data.taskId === taskId);
+
+          if (completedJob) {
+            clearTimeout(timeoutId);
+            resolve();
+            return;
+          }
+
+          const failedJobs = await queue.getFailed();
+          const failedJob = failedJobs.find((job: any) => job.data.taskId === taskId);
+
+          if (failedJob) {
+            clearTimeout(timeoutId);
+            resolve();
+            return;
+          }
+
+          setTimeout(checkCompletion, 100);
+        } catch (error) {
+          clearTimeout(timeoutId);
+          reject(error);
+        }
+      };
+
+      checkCompletion();
+    });
+
+    // Step 2: Poll the API to ensure database has been updated
+    const remainingTimeout = timeout - (Date.now() - startTime);
+    const apiTimeout = Math.max(remainingTimeout, 5000); // At least 5 seconds for API polling
+
+    await new Promise<void>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error(`Database not updated for task ${taskId} within ${apiTimeout}ms after job completion`));
+      }, apiTimeout);
+
+      const checkDatabase = async () => {
+        try {
+          const response = await request(server.server).get(`/tasks/${taskId}`);
+
+          if (response.status === 200 && response.body.status !== 'pending') {
+            clearTimeout(timeoutId);
+            resolve();
+            return;
+          }
+
+          setTimeout(checkDatabase, 50);
+        } catch (error) {
+          clearTimeout(timeoutId);
+          reject(error);
+        }
+      };
+
+      checkDatabase();
+    });
+  };
+
+  /**
    * Polls the GET /tasks/:taskId endpoint until the task reaches a desired status.
    * Throws an error if the timeout is exceeded.
    */
@@ -98,6 +182,18 @@ describe('Task Routes E2E Tests', () => {
     // Clean up nock mocks
     nock.cleanAll();
 
+    // Clean the BullMQ queue to prevent jobs from previous tests interfering
+    if ((server as any).container?.taskQueue) {
+      try {
+        const queue = (server as any).container.taskQueue.queue;
+        if (queue) {
+          await queue.obliterate({ force: true });
+        }
+      } catch (error) {
+        console.error('Failed to clean queue:', error);
+      }
+    }
+
     // Fast and dumb cleanup - nuke and re-create output directory
     try {
       await fs.rm(outputDir, { recursive: true, force: true });
@@ -114,6 +210,11 @@ describe('Task Routes E2E Tests', () => {
   }, 15000);
 
   afterAll(async () => {
+    // Shutdown queue and worker connections first
+    if ((server as any).container?.shutdown) {
+      await (server as any).container.shutdown();
+    }
+
     await server.close();
     await database.disconnect();
     await mongoServer.stop();
@@ -313,8 +414,15 @@ describe('Task Routes E2E Tests', () => {
 
         const taskId = createResponse.body.taskId;
 
-        // Poll for completion
-        const completedTask = await pollForTaskStatus(taskId, 'completed');
+        // Wait for job to complete in BullMQ
+        await waitForJobCompletion(taskId);
+
+        // Verify completion via API
+        const getResponse = await request(server.server)
+          .get(`/tasks/${taskId}`)
+          .expect(200);
+
+        const completedTask = getResponse.body;
 
         // Assert
         expect(completedTask.status).toBe('completed');
@@ -328,7 +436,7 @@ describe('Task Routes E2E Tests', () => {
           expect(typeof image.resolution).toBe('string');
           expect(typeof image.path).toBe('string');
         });
-      }, 15000);
+      }, 35000);
 
       it('should retrieve multiple different tasks', async () => {
         // Create multiple tasks
@@ -439,24 +547,30 @@ describe('Task Routes E2E Tests', () => {
       const taskId = createResponse.body.taskId;
       const price = createResponse.body.price;
 
-      // Step 2: Poll until task completes
-      const completedTask = await pollForTaskStatus(taskId, 'completed');
+      // Step 2: Wait for job to complete in BullMQ
+      await waitForJobCompletion(taskId);
 
-      // Step 3: Verify completion
+      // Step 3: Verify completion via API
+      const completedTaskResponse = await request(server.server)
+        .get(`/tasks/${taskId}`)
+        .expect(200);
+
+      const completedTask = completedTaskResponse.body;
+
       expect(completedTask.taskId).toBe(taskId);
       expect(completedTask.price).toBe(price);
       expect(completedTask.status).toBe('completed');
       expect(Array.isArray(completedTask.images)).toBe(true);
       expect(completedTask.images.length).toBeGreaterThan(0);
 
-      // Step 4: Verify we can still retrieve it
+      // Step 4: Verify we can still retrieve it again
       const getResponse = await request(server.server)
         .get(`/tasks/${taskId}`)
         .expect(200);
 
       expect(getResponse.body.status).toBe('completed');
       expect(getResponse.body.images.length).toBe(completedTask.images.length);
-    }, 15000);
+    }, 35000);
 
     it('should handle rapid create-retrieve cycles', async () => {
       for (let i = 0; i < 3; i++) {
@@ -473,7 +587,7 @@ describe('Task Routes E2E Tests', () => {
       }
     });
 
-    it('should process tasks with deterministic output structure', async () => {
+    it('should process tasks with deterministic output structure (requires Redis)', async () => {
       // Create task
       const createResponse = await request(server.server)
         .post('/tasks')
@@ -482,27 +596,34 @@ describe('Task Routes E2E Tests', () => {
 
       const taskId = createResponse.body.taskId;
 
-      // Poll for completion
-      const completedTask = await pollForTaskStatus(taskId, 'completed');
+      // Wait for job to complete in BullMQ
+      await waitForJobCompletion(taskId);
+
+      // Get completed task via API
+      const getResponse = await request(server.server)
+        .get(`/tasks/${taskId}`)
+        .expect(200);
+
+      const completedTask = getResponse.body;
 
       // Verify deterministic output structure
       expect(completedTask.status).toBe('completed');
       expect(completedTask.images.length).toBeGreaterThan(0);
 
       // Check that we have multiple resolutions
-      const resolutions = completedTask.images.map((img) => img.resolution);
+      const resolutions = completedTask.images.map((img: any) => img.resolution);
       expect(resolutions.length).toBeGreaterThanOrEqual(2);
       // Verify each resolution has a unique value
       const uniqueResolutions = new Set(resolutions);
       expect(uniqueResolutions.size).toBeGreaterThanOrEqual(2);
 
       // Verify path structure for each resolution
-      completedTask.images.forEach((image) => {
+      completedTask.images.forEach((image: any) => {
         expect(image.path).toContain(image.resolution);
         // Verify it has an image extension (jpg, webp, png, etc.)
         expect(image.path).toMatch(/\.(jpg|jpeg|webp|png)$/i);
       });
-    }, 15000);
+    }, 35000);
   });
 
   describe('Error Handling', () => {

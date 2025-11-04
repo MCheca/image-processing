@@ -18,7 +18,7 @@ interface JobData {
 }
 
 export class BullMQTaskQueue implements ITaskQueue {
-  private queue: Queue;
+  public readonly queue: Queue;
 
   constructor(redisConfig: RedisConfig, queueName: string = 'image-processing') {
     this.queue = new Queue(queueName, {

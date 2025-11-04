@@ -128,6 +128,9 @@ export const createServer = async (): Promise<FastifyInstance> => {
   // Create dependency injection container
   const container = createContainer();
 
+  // Store container on server for access to shutdown function
+  server.decorate('container', container);
+
   // Register routes
   await server.register(healthRoutes, { healthController: container.healthController });
   await server.register(taskRoutes, { taskController: container.taskController });

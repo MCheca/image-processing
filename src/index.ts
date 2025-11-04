@@ -19,20 +19,31 @@ const start = async () => {
     const shutdown = async (signal: string) => {
       console.log(`${signal} received, closing server gracefully...`);
 
-      // Stop accepting new connections
-      await server.close();
+      try {
+        // Close queue and worker connections
+        if ((server as any).container?.shutdown) {
+          await (server as any).container.shutdown();
+          console.log('Queue and worker connections closed');
+        }
 
-      // Close database
-      await database.disconnect();
+        // Stop accepting new connections
+        await server.close();
 
-      // Add timeout to force shutdown
-      setTimeout(() => {
-        console.error('Forceful shutdown after timeout');
+        // Close database
+        await database.disconnect();
+
+        console.log('Server and database connections closed');
+        process.exit(0);
+      } catch (error) {
+        console.error('Error during shutdown:', error);
         process.exit(1);
-      }, 10000); // 10 seconds
-
-      console.log('Server and database connections closed');
-      process.exit(0);
+      } finally {
+        // Add timeout to force shutdown
+        setTimeout(() => {
+          console.error('Forceful shutdown after timeout');
+          process.exit(1);
+        }, 10000); // 10 seconds
+      }
     };
 
     process.on('SIGTERM', () => shutdown('SIGTERM'));
