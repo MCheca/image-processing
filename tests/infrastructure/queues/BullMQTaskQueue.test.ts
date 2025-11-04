@@ -29,7 +29,10 @@ describe('BullMQTaskQueue', () => {
 
   afterEach(async () => {
     if (taskQueue) {
-      await taskQueue.close();
+      mockQueue.close.mockResolvedValue();
+      await taskQueue.close().catch(() => {
+        // Ignore errors in cleanup
+      });
     }
   });
 
