@@ -3,30 +3,34 @@ import request from 'supertest';
 import { createServer } from '../../src/infrastructure/http/server';
 import { DatabaseConnection } from '../../src/infrastructure/persistence/database';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { RedisMemoryServer } from 'redis-memory-server';
 
 describe('Health Routes E2E Tests', () => {
   let server: FastifyInstance;
   let mongoServer: MongoMemoryServer;
+  let redisServer: RedisMemoryServer;
   let database: DatabaseConnection;
 
   beforeAll(async () => {
-    // Start in-memory MongoDB
     mongoServer = await MongoMemoryServer.create();
     const mongoUri = mongoServer.getUri();
-
-    // Connect to database
+  
     database = DatabaseConnection.getInstance();
     await database.connect({ uri: mongoUri });
-
-    // Create server
-    server = await createServer();
+  
+    redisServer = new RedisMemoryServer();
+    const host = await redisServer.getHost();
+    const port = await redisServer.getPort();
+  
+    server = await createServer({ redis: { host, port } });
     await server.ready();
   }, 30000);
 
   afterAll(async () => {
-    await server.close();
-    await database.disconnect();
-    await mongoServer.stop();
+    if (server) await server.close();
+    if (database) await database.disconnect();
+    if (mongoServer) await mongoServer.stop();
+    if (redisServer) await redisServer.stop();
   }, 30000);
 
   describe('GET /health/live', () => {

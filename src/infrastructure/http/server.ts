@@ -11,7 +11,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { errorResponseSchema } from './schemas/taskSchemas';
 import { config } from '../config';
 
-export const createServer = async (): Promise<FastifyInstance> => {
+export const createServer = async (opts?: { redis?: { host: string; port: number; password?: string } }): Promise<FastifyInstance> => {
   const server = Fastify({
     logger: {
       level: config.LOG_LEVEL,
@@ -126,7 +126,11 @@ export const createServer = async (): Promise<FastifyInstance> => {
   server.setErrorHandler(errorHandler);
 
   // Create dependency injection container
-  const container = await createContainer();
+  const container = await createContainer({ redis: opts?.redis });
+
+  server.addHook('onClose', async () => {
+    await container.shutdown();
+  });
 
   // Store container on server for access to shutdown function
   server.decorate('container', container);

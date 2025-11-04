@@ -19,8 +19,11 @@ export interface Container {
   shutdown: () => Promise<void>;
 }
 
-export const createContainer = async (): Promise<Container> => {
-  const redisConfig = {
+type RedisOverride = { host: string; port: number; password?: string };
+
+export const createContainer = async (opts?: { redis?: RedisOverride; queueConcurrency?: number }):
+Promise<Container> => {
+  const redisConfig = opts?.redis ?? {
     host: config.REDIS_HOST,
     port: config.REDIS_PORT,
     password: config.REDIS_PASSWORD,
@@ -39,7 +42,7 @@ export const createContainer = async (): Promise<Container> => {
   // Queue and worker
   const taskQueue = new BullMQTaskQueue(redisConfig);
   const worker = new BullMQWorker(redisConfig, processImageUseCase, {
-    concurrency: config.QUEUE_CONCURRENCY,
+    concurrency: opts?.queueConcurrency ?? config.QUEUE_CONCURRENCY,
   });
 
   // ✅ Wait until BullMQ is actually ready

@@ -137,9 +137,10 @@ describe('Task Routes E2E Tests', () => {
     await database.connect({ uri: mongoUri });
   
     redisServer = new RedisMemoryServer();
-    const redisUrl = `redis://${await redisServer.getHost()}:${await redisServer.getPort()}`;
+    const redisHost = await redisServer.getHost();
+    const redisPort = await redisServer.getPort();
   
-    server = await createServer();
+    server = await createServer({ redis: { host: redisHost, port: redisPort } });
   
     // Wait until all plugins/decorators (including container) are ready
     await server.after();
@@ -190,9 +191,10 @@ describe('Task Routes E2E Tests', () => {
   }, 15000);
 
   afterAll(async () => {
-    if (server) await server.close();
+    if (server) await server.close();          // triggers container.shutdown()
     if (database) await database.disconnect();
     if (mongoServer) await mongoServer.stop();
+    if (redisServer) await redisServer.stop(); // stop after BullMQ closed
   }, 30000);
 
   describe('POST /tasks', () => {
