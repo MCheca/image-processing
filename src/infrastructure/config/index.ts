@@ -18,6 +18,24 @@ const envSchema = z.object({
   // Database
   MONGODB_URI: z.string().default('mongodb://localhost:27017/image-processing'),
 
+  // Redis
+  REDIS_HOST: z.string().default('localhost'),
+  REDIS_PORT: z
+    .string()
+    .default('6379')
+    .transform((val) => parseInt(val, 10)),
+  REDIS_PASSWORD: z.string().optional(),
+
+  // Queue
+  QUEUE_CONCURRENCY: z
+    .string()
+    .default('5')
+    .transform((val) => parseInt(val, 10)),
+  QUEUE_MAX_RETRIES: z
+    .string()
+    .default('3')
+    .transform((val) => parseInt(val, 10)),
+
   // CORS
   CORS_ORIGIN: z.string().default('*'),
   CORS_CREDENTIALS: z

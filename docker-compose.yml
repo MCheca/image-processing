@@ -53,6 +53,11 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       TRUST_PROXY: ${TRUST_PROXY:-false}
       MONGODB_URI: mongodb://mongodb:27017/image-processing
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      QUEUE_CONCURRENCY: ${QUEUE_CONCURRENCY:-5}
+      QUEUE_MAX_RETRIES: ${QUEUE_MAX_RETRIES:-3}
       CORS_ORIGIN: ${CORS_ORIGIN:-*}
       CORS_CREDENTIALS: ${CORS_CREDENTIALS:-true}
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
