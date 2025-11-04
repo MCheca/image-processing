@@ -11,6 +11,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { getConfig } from '../../src/infrastructure/config';
 import nock from 'nock';
+import { RedisMemoryServer } from 'redis-memory-server';
 
 // Response type interface for test assertions
 interface TaskResponse {
@@ -29,22 +30,17 @@ const BAD_DOMAIN_URL = 'https://bad-domain-that-does-not-exist.com/image.jpg';
 describe('Task Routes E2E Tests', () => {
   let server: FastifyInstance;
   let mongoServer: MongoMemoryServer;
+  let redisServer: RedisMemoryServer;
   let database: DatabaseConnection;
   let outputDir: string;
   const mockImagePath = path.join(__dirname, '..', 'fixtures', 'test-image.jpg');
 
-  /**
-   * Waits for a BullMQ job to complete and the database to be updated.
-   * First waits for the job to complete in BullMQ, then polls the API
-   * to ensure the database has been updated.
-   */
   const waitForJobCompletion = async (
     taskId: string,
     timeout = 30000,
   ): Promise<void> => {
     const startTime = Date.now();
 
-    // Step 1: Wait for job to complete in BullMQ
     await new Promise<void>((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         reject(new Error(`Job for task ${taskId} did not complete in BullMQ within ${timeout}ms`));
@@ -61,7 +57,6 @@ describe('Task Routes E2E Tests', () => {
         try {
           const jobs = await queue.getCompleted();
           const completedJob = jobs.find((job: any) => job.data.taskId === taskId);
-
           if (completedJob) {
             clearTimeout(timeoutId);
             resolve();
@@ -70,7 +65,6 @@ describe('Task Routes E2E Tests', () => {
 
           const failedJobs = await queue.getFailed();
           const failedJob = failedJobs.find((job: any) => job.data.taskId === taskId);
-
           if (failedJob) {
             clearTimeout(timeoutId);
             resolve();
@@ -87,9 +81,8 @@ describe('Task Routes E2E Tests', () => {
       checkCompletion();
     });
 
-    // Step 2: Poll the API to ensure database has been updated
     const remainingTimeout = timeout - (Date.now() - startTime);
-    const apiTimeout = Math.max(remainingTimeout, 5000); // At least 5 seconds for API polling
+    const apiTimeout = Math.max(remainingTimeout, 5000);
 
     await new Promise<void>((resolve, reject) => {
       const timeoutId = setTimeout(() => {
@@ -99,13 +92,11 @@ describe('Task Routes E2E Tests', () => {
       const checkDatabase = async () => {
         try {
           const response = await request(server.server).get(`/tasks/${taskId}`);
-
           if (response.status === 200 && response.body.status !== 'pending') {
             clearTimeout(timeoutId);
             resolve();
             return;
           }
-
           setTimeout(checkDatabase, 50);
         } catch (error) {
           clearTimeout(timeoutId);
@@ -117,10 +108,6 @@ describe('Task Routes E2E Tests', () => {
     });
   };
 
-  /**
-   * Polls the GET /tasks/:taskId endpoint until the task reaches a desired status.
-   * Throws an error if the timeout is exceeded.
-   */
   const pollForTaskStatus = async (
     taskId: string,
     desiredStatus: 'completed' | 'failed',
@@ -131,11 +118,9 @@ describe('Task Routes E2E Tests', () => {
 
     while (Date.now() - startTime < timeout) {
       const response = await request(server.server).get(`/tasks/${taskId}`);
-
       if (response.status === 200 && response.body.status === desiredStatus) {
         return response.body as TaskResponse;
       }
-
       await new Promise(resolve => setTimeout(resolve, pollInterval));
     }
 
@@ -143,58 +128,54 @@ describe('Task Routes E2E Tests', () => {
   };
 
   beforeAll(async () => {
-    // Ensure test output directory exists
     await fs.mkdir(testOutputDir, { recursive: true });
-
-    // Start in-memory MongoDB
+  
     mongoServer = await MongoMemoryServer.create();
     const mongoUri = mongoServer.getUri();
-
-    // Connect to database
+  
     database = DatabaseConnection.getInstance();
     await database.connect({ uri: mongoUri });
-
-    // Create server (will use the OUTPUT_DIR env variable we just set)
+  
+    redisServer = new RedisMemoryServer();
+    const redisUrl = `redis://${await redisServer.getHost()}:${await redisServer.getPort()}`;
+  
     server = await createServer();
+  
+    // Wait until all plugins/decorators (including container) are ready
+    await server.after();
     await server.ready();
-
-    // Get output directory from config
+  
+    if (!(server as any).container) {
+      throw new Error('Server container not initialized');
+    }
+  
     const config = getConfig();
     outputDir = path.resolve(config.OUTPUT_DIR);
   }, 30000);
 
   beforeEach(async () => {
-    // Set up nock to intercept image downloads and reply with local test file
     nock('https://picsum.photos')
       .persist()
       .get(/\/\d+\/\d+/)
-      .replyWithFile(200, mockImagePath, {
-        'Content-Type': 'image/jpeg',
-      });
+      .replyWithFile(200, mockImagePath, { 'Content-Type': 'image/jpeg' });
 
-    // Mock for failure tests
     nock('https://bad-domain-that-does-not-exist.com')
       .get('/image.jpg')
       .reply(500, 'Internal Server Error');
   });
 
   afterEach(async () => {
-    // Clean up nock mocks
     nock.cleanAll();
 
-    // Clean the BullMQ queue to prevent jobs from previous tests interfering
-    if ((server as any).container?.taskQueue) {
+    if (server && (server as any).container?.taskQueue) {
       try {
         const queue = (server as any).container.taskQueue.queue;
-        if (queue) {
-          await queue.obliterate({ force: true });
-        }
+        if (queue) await queue.obliterate({ force: true });
       } catch (error) {
         console.error('Failed to clean queue:', error);
       }
     }
 
-    // Fast and dumb cleanup - nuke and re-create output directory
     try {
       await fs.rm(outputDir, { recursive: true, force: true });
       await fs.mkdir(outputDir, { recursive: true });
@@ -202,7 +183,6 @@ describe('Task Routes E2E Tests', () => {
       console.error('Failed to clean up output directory:', error);
     }
 
-    // Clean up database
     const collections = mongoose.connection.collections;
     for (const key in collections) {
       await collections[key].deleteMany({});
@@ -210,21 +190,9 @@ describe('Task Routes E2E Tests', () => {
   }, 15000);
 
   afterAll(async () => {
-    // Shutdown queue and worker connections first
-    if ((server as any).container?.shutdown) {
-      await (server as any).container.shutdown();
-    }
-
-    await server.close();
-    await database.disconnect();
-    await mongoServer.stop();
-
-    // Clean up test output directory completely
-    try {
-      await fs.rm(testOutputDir, { recursive: true, force: true });
-    } catch (error) {
-      console.error('Failed to clean up test output directory:', error);
-    }
+    if (server) await server.close();
+    if (database) await database.disconnect();
+    if (mongoServer) await mongoServer.stop();
   }, 30000);
 
   describe('POST /tasks', () => {

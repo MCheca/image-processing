@@ -43,6 +43,10 @@ export class BullMQWorker {
     );
   }
 
+  public async waitUntilReady(): Promise<void> {
+    await this.worker.waitUntilReady();
+  }
+
   private async processJob(job: Job<JobData>): Promise<void> {
     const { taskId, imageSource, filename } = job.data;
 

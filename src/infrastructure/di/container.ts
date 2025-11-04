@@ -19,8 +19,7 @@ export interface Container {
   shutdown: () => Promise<void>;
 }
 
-export const createContainer = (): Container => {
-  // Redis configuration
+export const createContainer = async (): Promise<Container> => {
   const redisConfig = {
     host: config.REDIS_HOST,
     port: config.REDIS_PORT,
@@ -34,24 +33,26 @@ export const createContainer = (): Container => {
   const imageProcessor = new SharpImageProcessor();
   const imageDownloader = new HttpImageDownloader();
 
-  // Use Cases
+  // Use cases
   const processImageUseCase = new ProcessImageUseCase(taskRepository, imageProcessor);
 
-  // Queue and Worker
+  // Queue and worker
   const taskQueue = new BullMQTaskQueue(redisConfig);
   const worker = new BullMQWorker(redisConfig, processImageUseCase, {
     concurrency: config.QUEUE_CONCURRENCY,
   });
 
+  // ✅ Wait until BullMQ is actually ready
+  await taskQueue.queue.waitUntilReady();
+  await worker.waitUntilReady();
+
   const createTaskUseCase = new CreateTaskUseCase(taskRepository, taskQueue, imageDownloader);
   const getTaskUseCase = new GetTaskUseCase(taskRepository);
 
-  // Controllers
   const taskController = new TaskController(createTaskUseCase, getTaskUseCase);
   const database = DatabaseConnection.getInstance();
   const healthController = new HealthController(database);
 
-  // Shutdown function to close connections gracefully
   const shutdown = async (): Promise<void> => {
     await taskQueue.close();
     await worker.close();

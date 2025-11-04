@@ -126,7 +126,7 @@ export const createServer = async (): Promise<FastifyInstance> => {
   server.setErrorHandler(errorHandler);
 
   // Create dependency injection container
-  const container = createContainer();
+  const container = await createContainer();
 
   // Store container on server for access to shutdown function
   server.decorate('container', container);
