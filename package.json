@@ -29,7 +29,9 @@
     "@fastify/rate-limit": "^10.3.0",
     "@fastify/swagger": "^9.5.2",
     "@fastify/swagger-ui": "^5.2.3",
+    "bullmq": "^5.63.0",
     "fastify": "^5.6.1",
+    "ioredis": "^5.8.2",
     "mongoose": "^8.19.2",
     "sharp": "^0.34.4",
     "zod": "^4.1.12"
